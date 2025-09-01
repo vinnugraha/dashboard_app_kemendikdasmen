@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
-// Wajib: Prisma di Node runtime (bukan Edge)
+// Pastikan ini berjalan di Node runtime (bukan Edge)
 export const runtime = 'nodejs'
 
 type LoginBody = { username: string; password: string }
@@ -11,52 +11,66 @@ type LoginBody = { username: string; password: string }
 export async function POST(req: Request) {
   try {
     const { username, password } = (await req.json()) as LoginBody
+
     if (!username || !password) {
-      return NextResponse.json({ message: 'Username dan password harus diisi' }, { status: 400 })
+      return NextResponse.json(
+        { message: 'Username dan password harus diisi' },
+        { status: 400 }
+      )
     }
 
-    // Cari user by username ATAU email
-    const user = await prisma.user.findFirst({
-      where: { OR: [{ username }, { email: username }] },
-      // Sesuaikan select/include ini dengan relasi hasil prisma db pull kamu
+    // HANYA pakai username (email sudah tidak ada di schema)
+    const user = await prisma.user.findUnique({
+      where: { username },
       include: {
-        role: { select: { id: true, name: true } },              // @map("role_name") dsb jika ada
-        unitKerja: { select: { id: true, nama: true } },         // @map("nama_unit")
-        // Jika di schema ada relasi "sestama", biarkan; kalau tidak ada, abaikan
-        // @ts-expect-error optional relation
-        sestama: { select: { id: true, nama: true } } as any,
+        role: { select: { id: true, name: true } },
+        unitKerja: {
+          select: {
+            id: true,
+            nama: true,
+            kementerian: { select: { id: true, nama: true } },
+            sestama: { select: { id: true, nama: true } },
+          },
+        },
+        // relasi langsung ke Sestama jika ada di model User
+        sestama: { select: { id: true, nama: true } },
       },
     })
 
     if (!user) {
-      return NextResponse.json({ message: 'Username atau password salah' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Username atau password salah' },
+        { status: 401 }
+      )
     }
 
-    // Field hash di Prisma biasanya passwordHash (@map("password_hash"))
-    const hash =
-      // @ts-ignore – jaga-jaga jika hasil introspeksi tidak memetakan ke camelCase
-      (user as any).passwordHash ?? (user as any).password_hash ?? ''
+    // password hash: di schema @map("password_hash") -> field TS: passwordHash
+    const hash = user.passwordHash ?? ''
 
     const ok = await bcrypt.compare(password, hash)
     if (!ok) {
-      return NextResponse.json({ message: 'Username atau password salah' }, { status: 401 })
+      return NextResponse.json(
+        { message: 'Username atau password salah' },
+        { status: 401 }
+      )
     }
 
-    // Bentuk payload sesuai frontend-mu (pakai snake_case seperti sebelumnya)
+    // Bentuk payload yang dipakai di frontend
     const payload = {
-      user_id: user.id,                          // @map("user_id")
+      user_id: user.id, // @map("user_id")
       username: user.username,
-      email: user.email ?? null,
-      role_id: (user as any).roleId ?? null,     // @map("role_id")
-      role_name: (user as any).role?.name ?? null,
+      role_id: (user as any).roleId ?? null, // @map("role_id")
+      role_name: user.role?.name ?? null,
       unit_id: (user as any).unitKerjaId ?? null, // @map("unit_id")
-      unit_name: (user as any).unitKerja?.nama ?? null,
-      // kolom "sestama" opsional – akan null jika tak ada di schema
-      sestama_id: (user as any).sestamaId ?? null,
-      sestama_name: (user as any).sestama?.nama ?? null,
+      unit_name: user.unitKerja?.nama ?? null,
+      kementerian_id: (user as any).unitKerja?.kementerian?.id ?? null,
+      kementerian_name: (user as any).unitKerja?.kementerian?.nama ?? null,
+      // Sestama bisa dari relasi langsung di User atau dari UnitKerja
+      sestama_id: (user as any).sestamaId ?? user.unitKerja?.sestama?.id ?? null,
+      sestama_name: user.sestama?.nama ?? user.unitKerja?.sestama?.nama ?? null,
     }
 
-    // Session token sederhana (sebaiknya ganti JWT production)
+    // Session sederhana (gantikan dengan JWT/iron-session sesuai kebutuhan)
     const sessionToken = Buffer.from(
       JSON.stringify({ userId: payload.user_id, ts: Date.now() })
     ).toString('base64')
@@ -71,8 +85,9 @@ export async function POST(req: Request) {
     })
     return res
   } catch (err: any) {
+    console.error('LOGIN_ERROR', err)
     return NextResponse.json(
-      { message: 'Terjadi kesalahan sistem', detail: String(err?.message ?? err) },
+      { message: 'Terjadi kesalahan sistem' },
       { status: 500 }
     )
   }
