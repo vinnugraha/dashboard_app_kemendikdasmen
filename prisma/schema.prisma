@@ -1,12 +1,83 @@
+// ============================================================================
+// Prisma schema — diselaraskan dengan ERD terbaru
+// ============================================================================
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../lib/generated/prisma"
 }
 
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
 }
+
+// ===================== ENUMS (value mapping ke string di DB) =================
+
+enum DomainKementerian {
+  KEMENDIKDASMEN    @map("Kemendikdasmen")
+  KEMENDIKBUD       @map("Kemendikbud")
+  KEMENDIKTISAINTEK @map("Kemendiktisaintek")
+}
+
+enum YaTidak {
+  YA    @map("Ya")
+  TIDAK @map("Tidak")
+}
+
+enum KondisiAplikasi {
+  AKTIF_DAN_DIGUNAKAN         @map("Aktif dan Digunakan")
+  AKTIF_TIDAK_DIGUNAKAN       @map("Aktif dan Tidak Digunakan")
+  TIDAK_AKTIF_AKAN_DIGUNAKAN  @map("Tidak Aktif tetapi Akan Digunakan")
+  TIDAK_AKTIF_TIDAK_DIGUNAKAN @map("Tidak Aktif dan Tidak Digunakan")
+}
+
+enum JenisLayanan {
+  G2G @map("G2G")
+  G2C @map("G2C")
+  G2B @map("G2B")
+}
+
+enum SasaranLayanan {
+  LOKAL         @map("Lokal")
+  NASIONAL      @map("Nasional")
+  INTERNASIONAL @map("Internasional")
+}
+
+enum BasisAplikasi {
+  WEB     @map("Web")
+  DESKTOP @map("Desktop")
+  MOBILE  @map("Mobile")
+}
+
+enum TipeLisensi {
+  OPEN_SOURCE @map("Open Source")
+  PROPRIETARY @map("Proprietary")
+}
+
+enum ModelPengembangan {
+  MICROSERVICES @map("Microservices")
+  MONOLITHIC    @map("Monolytic")
+}
+
+enum SistemOperasi {
+  WINDOWS @map("Windows")
+  LINUX   @map("Linux")
+}
+
+enum LayananInfra {
+  PDNS                        @map("PDNS")
+  KOMPUTASI_AWAN_PUSDATIN     @map("Komputasi Awan Pusdatin")
+  PUBLIC_CLOUD_PUSDATIN       @map("Public Cloud Pusdatin")
+  PUBLIC_CLOUD_MANDIRI        @map("Public Cloud Mandiri")
+  HOSTING                     @map("Hosting")
+  COLOCATION_PUSDATIN_CIPUTAT @map("Co-location Pusdatin Ciputat")
+  COLOCATION_PUSDATIN_SENAYAN @map("Co-location Pusdatin Senayan")
+  COLOCATION_PUSDATIN_IDC     @map("Co-location Pusdatin IDC")
+  COLOCATION_MANDIRI          @map("Co-location Mandiri")
+  RUANG_SERVER_MANDIRI        @map("Ruang Server Mandiri")
+}
+
+// ============================ MASTER / REFERENSI =============================
 
 model Role {
   id    Int     @id @default(autoincrement())
@@ -15,6 +86,63 @@ model Role {
   users User[]
 
   @@map("role")
+}
+
+model Kementerian {
+  id        Int         @id @default(autoincrement()) @map("kementerian_id")
+  nama      String      @map("nama_kementerian")
+  unitKerja UnitKerja[]
+  sestamas  Sestama[]
+
+  @@map("kementerian")
+}
+
+model Sestama {
+  id            Int         @id @default(autoincrement()) @map("sestama_id")
+  nama          String      @map("nama_sestama")
+  kementerianId Int         @map("kementerian_id")
+  kementerian   Kementerian @relation(fields: [kementerianId], references: [id])
+
+  unitKerja    UnitKerja[]
+  users        User[]
+  applications Application[]
+
+  @@index([kementerianId])
+  @@map("sestama")
+}
+
+model UnitKerja {
+  id            Int    @id @default(autoincrement()) @map("unit_id")
+  nama          String @map("nama_unit")
+  kementerianId Int    @map("kementerian_id")
+  sestamaId     Int?   @map("sestama_id")
+
+  applications Application[]
+  kementerian  Kementerian   @relation(fields: [kementerianId], references: [id])
+  sestama      Sestama?      @relation(fields: [sestamaId], references: [id])
+  users        User[]
+
+  @@index([kementerianId])
+  @@index([sestamaId])
+  @@map("unit_kerja")
+}
+
+model User {
+  id           Int    @id @default(autoincrement()) @map("user_id")
+  username     String @unique
+  passwordHash String @map("password_hash")
+  roleId       Int    @map("role_id")
+  unitKerjaId  Int    @map("unit_id")
+  sestamaId    Int?   @map("sestama_id")
+
+  role      Role      @relation(fields: [roleId], references: [id])
+  unitKerja UnitKerja @relation(fields: [unitKerjaId], references: [id])
+  sestama   Sestama?  @relation(fields: [sestamaId], references: [id])
+
+  @@index([roleId])
+  @@index([unitKerjaId])
+  @@index([sestamaId])
+  @@map("users")
 }
 
 model Provinsi {
@@ -35,6 +163,14 @@ model KabupatenKota {
 
   @@index([provinsiId])
   @@map("kab_kota")
+}
+
+model PenggunaLayanan {
+  id           Int           @id @default(autoincrement()) @map("user_layanan_id")
+  nama         String        @map("nama_pengguna_layanan")
+  applications Application[]
+
+  @@map("pengguna_layanan")
 }
 
 model Bahasa {
@@ -69,88 +205,173 @@ model DatabaseEngine {
   @@map("database")
 }
 
-model PenggunaLayanan {
-  id           Int           @id @default(autoincrement()) @map("user_layanan_id")
-  nama         String        @map("nama_pengguna_layanan")
-  applications Application[]
+// ============================ RAD / RAA / RAK / RAL ==========================
 
-  @@map("pengguna_layanan")
-}
-
-model Kementerian {
-  id        Int         @id @default(autoincrement()) @map("kementerian_id")
-  nama      String      @map("nama_kementerian")
-  unitKerja UnitKerja[]
-
-  @@map("kementerian")
-}
-
-model UnitKerja {
-  id            Int           @id @default(autoincrement()) @map("unit_id")
-  nama          String        @map("nama_unit")
-  kementerianId Int           @map("kementerian_id")
-  applications  Application[]
-  kementerian   Kementerian   @relation(fields: [kementerianId], references: [id])
-  users         User[]
-
-  @@index([kementerianId])
-  @@map("unit_kerja")
-}
-
-model User {
-  id           Int       @id @default(autoincrement()) @map("user_id")
-  username     String    @unique
-  passwordHash String    @map("password_hash")
-  roleId       Int       @map("role_id")
-  unitKerjaId  Int       @map("unit_id")
-  role         Role      @relation(fields: [roleId], references: [id])
-  unitKerja    UnitKerja @relation(fields: [unitKerjaId], references: [id])
-
-  @@index([roleId])
-  @@index([unitKerjaId])
-  @@map("users")
-}
-
-model Rkk1 {
-  id    Int    @id @default(autoincrement()) @map("rkk1_id")
+model Rad1 {
+  id    Int    @id @default(autoincrement()) @map("rad1_id")
   nama  String
-  rkk2s Rkk2[]
+  rad2s Rad2[]
 
-  @@map("rkk_1")
+  @@map("rad_1")
 }
 
-model Rkk2 {
-  id     Int    @id @default(autoincrement()) @map("rkk2_id")
+model Rad2 {
+  id     Int    @id @default(autoincrement()) @map("rad2_id")
   nama   String
-  rkk1Id Int    @map("rkk1_id")
-  rkk1   Rkk1   @relation(fields: [rkk1Id], references: [id])
-  rkk3s  Rkk3[]
+  rad1Id Int    @map("rad1_id")
+  rad1   Rad1   @relation(fields: [rad1Id], references: [id])
+  rad3s  Rad3[]
 
-  @@index([rkk1Id])
-  @@map("rkk_2")
+  @@index([rad1Id])
+  @@map("rad_2")
 }
 
-model Rkk3 {
-  id     Int    @id @default(autoincrement()) @map("rkk3_id")
+model Rad3 {
+  id     Int    @id @default(autoincrement()) @map("rad3_id")
   nama   String
-  rkk2Id Int    @map("rkk2_id")
-  rkk2   Rkk2   @relation(fields: [rkk2Id], references: [id])
-  rkk4s  Rkk4[]
+  rad2Id Int    @map("rad2_id")
+  rad2   Rad2   @relation(fields: [rad2Id], references: [id])
+  rad4s  Rad4[]
 
-  @@index([rkk2Id])
-  @@map("rkk_3")
+  @@index([rad2Id])
+  @@map("rad_3")
 }
 
-model Rkk4 {
-  id           Int           @id @default(autoincrement()) @map("rkk4_id")
+model Rad4 {
+  id           Int           @id @default(autoincrement()) @map("rad4_id")
   nama         String
-  rkk3Id       Int           @map("rkk3_id")
+  rad3Id       Int           @map("rad3_id")
+  rad3         Rad3          @relation(fields: [rad3Id], references: [id])
   applications Application[]
-  rkk3         Rkk3          @relation(fields: [rkk3Id], references: [id])
 
-  @@index([rkk3Id])
-  @@map("rkk_4")
+  @@index([rad3Id])
+  @@map("rad_4")
 }
+
+model Raa1 {
+  id    Int    @id @default(autoincrement()) @map("raa1_id")
+  nama  String
+  raa2s Raa2[]
+
+  @@map("raa_1")
+}
+
+model Raa2 {
+  id     Int    @id @default(autoincrement()) @map("raa2_id")
+  nama   String
+  raa1Id Int    @map("raa1_id")
+  raa1   Raa1   @relation(fields: [raa1Id], references: [id])
+  raa3s  Raa3[]
+
+  @@index([raa1Id])
+  @@map("raa_2")
+}
+
+model Raa3 {
+  id     Int    @id @default(autoincrement()) @map("raa3_id")
+  nama   String
+  raa2Id Int    @map("raa2_id")
+  raa2   Raa2   @relation(fields: [raa2Id], references: [id])
+  raa4s  Raa4[]
+
+  @@index([raa2Id])
+  @@map("raa_3")
+}
+
+model Raa4 {
+  id           Int           @id @default(autoincrement()) @map("raa4_id")
+  nama         String
+  raa3Id       Int           @map("raa3_id")
+  raa3         Raa3          @relation(fields: [raa3Id], references: [id])
+  applications Application[]
+
+  @@index([raa3Id])
+  @@map("raa_4")
+}
+
+model Rak1 {
+  id    Int    @id @default(autoincrement()) @map("rak1_id")
+  nama  String
+  rak2s Rak2[]
+
+  @@map("rak_1")
+}
+
+model Rak2 {
+  id     Int    @id @default(autoincrement()) @map("rak2_id")
+  nama   String
+  rak1Id Int    @map("rak1_id")
+  rak1   Rak1   @relation(fields: [rak1Id], references: [id])
+  rak3s  Rak3[]
+
+  @@index([rak1Id])
+  @@map("rak_2")
+}
+
+model Rak3 {
+  id     Int    @id @default(autoincrement()) @map("rak3_id")
+  nama   String
+  rak2Id Int    @map("rak2_id")
+  rak2   Rak2   @relation(fields: [rak2Id], references: [id])
+  rak4s  Rak4[]
+
+  @@index([rak2Id])
+  @@map("rak_3")
+}
+
+model Rak4 {
+  id           Int           @id @default(autoincrement()) @map("rak4_id")
+  nama         String
+  rak3Id       Int           @map("rak3_id")
+  rak3         Rak3          @relation(fields: [rak3Id], references: [id])
+  applications Application[]
+
+  @@index([rak3Id])
+  @@map("rak_4")
+}
+
+model Ral1 {
+  id    Int    @id @default(autoincrement()) @map("ral1_id")
+  nama  String
+  ral2s Ral2[]
+
+  @@map("ral_1")
+}
+
+model Ral2 {
+  id     Int    @id @default(autoincrement()) @map("ral2_id")
+  nama   String
+  ral1Id Int    @map("ral1_id")
+  ral1   Ral1   @relation(fields: [ral1Id], references: [id])
+  ral3s  Ral3[]
+
+  @@index([ral1Id])
+  @@map("ral_2")
+}
+
+model Ral3 {
+  id     Int    @id @default(autoincrement()) @map("ral3_id")
+  nama   String
+  ral2Id Int    @map("ral2_id")
+  ral2   Ral2   @relation(fields: [ral2Id], references: [id])
+  ral4s  Ral4[]
+
+  @@index([ral2Id])
+  @@map("ral_3")
+}
+
+model Ral4 {
+  id           Int           @id @default(autoincrement()) @map("ral4_id")
+  nama         String
+  ral3Id       Int           @map("ral3_id")
+  ral3         Ral3          @relation(fields: [ral3Id], references: [id])
+  applications Application[]
+
+  @@index([ral3Id])
+  @@map("ral_4")
+}
+
+// =============================== RAB / RAI ===================================
 
 model Rab1 {
   id    Int    @id @default(autoincrement()) @map("rab1_id")
@@ -186,54 +407,194 @@ model Rab4 {
   id           Int           @id @default(autoincrement()) @map("rab4_id")
   nama         String
   rab3Id       Int           @map("rab3_id")
-  applications Application[]
   rab3         Rab3          @relation(fields: [rab3Id], references: [id])
+  applications Application[]
 
   @@index([rab3Id])
   @@map("rab_4")
 }
 
-/// / ======== TABEL UTAMA (application) ========
-model Application {
-  id                Int                 @id @default(autoincrement()) @map("application_id")
-  namaAplikasi      String              @map("nama_aplikasi")
-  unitId            Int                 @map("unit_id")
-  outputPelibatan   String?             @map("output_pelibatan")
-  targetPengguna    String?             @map("target_pengguna")
-  statusOperasi     String?             @map("status_operasi")
-  skalaUjiCoba      String?             @map("skala_uji_coba")
-  systemOperations  String?             @map("sistem_operasi")
-  provinsiId        Int?                @map("provinsi_id")
-  kabKotaId         Int?                @map("kab_kota_id")
-  bahasaId          Int?                @map("bahasa_id")
-  frameworkId       Int?                @map("framework_id")
-  metodeId          Int?                @map("metode_id")
-  databaseId        Int?                @map("database_id")
-  penggunaLayananId Int?                @map("user_layanan_id")
-  rkk4Id            Int?                @map("rkk4_id")
-  rab4Id            Int?                @map("rab4_id")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
-  bahasa            Bahasa?             @relation(fields: [bahasaId], references: [id])
-  databaseEngine    DatabaseEngine?     @relation(fields: [databaseId], references: [id])
-  framework         Framework?          @relation(fields: [frameworkId], references: [id])
-  kabKota           KabupatenKota?      @relation(fields: [kabKotaId], references: [id])
-  metode            MetodePengembangan? @relation(fields: [metodeId], references: [id])
-  provinsi          Provinsi?           @relation(fields: [provinsiId], references: [id])
-  rab4              Rab4?               @relation(fields: [rab4Id], references: [id])
-  rkk4              Rkk4?               @relation(fields: [rkk4Id], references: [id])
-  unit              UnitKerja           @relation(fields: [unitId], references: [id])
-  penggunaLayanan   PenggunaLayanan?    @relation(fields: [penggunaLayananId], references: [id])
+model Rai1 {
+  id    Int    @id @default(autoincrement()) @map("rai1_id")
+  nama  String
+  rai2s Rai2[]
 
+  @@map("rai_1")
+}
+
+model Rai2 {
+  id     Int    @id @default(autoincrement()) @map("rai2_id")
+  nama   String
+  rai1Id Int    @map("rai1_id")
+  rai1   Rai1   @relation(fields: [rai1Id], references: [id])
+  rai3s  Rai3[]
+
+  @@index([rai1Id])
+  @@map("rai_2")
+}
+
+model Rai3 {
+  id     Int    @id @default(autoincrement()) @map("rai3_id")
+  nama   String
+  rai2Id Int    @map("rai2_id")
+  rai2   Rai2   @relation(fields: [rai2Id], references: [id])
+  rai4s  Rai4[]
+
+  @@index([rai2Id])
+  @@map("rai_3")
+}
+
+model Rai4 {
+  id           Int           @id @default(autoincrement()) @map("rai4_id")
+  nama         String
+  rai3Id       Int           @map("rai3_id")
+  rai3         Rai3          @relation(fields: [rai3Id], references: [id])
+  applications Application[]
+
+  @@index([rai3Id])
+  @@map("rai_4")
+}
+
+// ============================== APPLICATION ==================================
+
+model Application {
+  id Int @id @default(autoincrement()) @map("application_id")
+
+  // Identitas & dasar
+  niak         String?
+  namaAplikasi String  @map("nama_aplikasi")
+  unitId       Int     @map("unit_id")
+  sestamaId    Int?    @map("sestama_id")
+
+  // Atribut aplikasi
+  singkatanAplikasi String?            @map("singkatan_aplikasi")
+  deskripsiAplikasi String?            @map("deskripsi_aplikasi")
+  outputAplikasi    String?            @map("output_aplikasi")
+  domainKementerian DomainKementerian? @map("domain_kementerian")
+  url               String?
+
+  // Kepatuhan/keanggotaan
+  punyaPse        YaTidak?         @map("punya_pse")
+  nomorPse        String?          @map("nomor_pse")
+  termasukBmn     YaTidak?         @map("termasuk_bmn")
+  nomorBmn        String?          @map("nomor_bmn")
+  kondisiAplikasi KondisiAplikasi? @map("kondisi_aplikasi")
+
+  // PIC
+  namaPengelola    String? @map("nama_pengelola")
+  nomorHpPengelola String? @map("nomor_hp_pengelola")
+  emailPengelola   String? @map("email_pengelola") // bukan enum
+
+  // Klasifikasi layanan & teknis
+  jenisLayanan      JenisLayanan?      @map("jenis_layanan")
+  sasaranLayanan    SasaranLayanan?    @map("sasaran_layanan")
+  basisAplikasi     BasisAplikasi?     @map("basis_aplikasi")
+  ipPublik          String?            @map("ip_publik")
+  tipeLisensi       TipeLisensi?       @map("tipe_lisensi")
+  modelPengembangan ModelPengembangan? @map("model_pengembangan")
+  sistemOperasi     SistemOperasi?     @map("sistem_operasi")
+  layananInfra      LayananInfra?      @map("layanan_infra")
+  sslStatus         YaTidak?           @map("ssl_status")
+
+  // Lokasi
+  provinsiId Int? @map("provinsi_id")
+  kabKotaId  Int? @map("kab_kota_id")
+
+  // Hirarki RAD/RAA/RAK/RAL/RAB/RAI (level 1..4)
+  rad1Id Int? @map("rad1_id")
+  rad2Id Int? @map("rad2_id")
+  rad3Id Int? @map("rad3_id")
+  rad4Id Int? @map("rad4_id")
+
+  raa1Id Int? @map("raa1_id")
+  raa2Id Int? @map("raa2_id")
+  raa3Id Int? @map("raa3_id")
+  raa4Id Int? @map("raa4_id")
+
+  rak1Id Int? @map("rak1_id")
+  rak2Id Int? @map("rak2_id")
+  rak3Id Int? @map("rak3_id")
+  rak4Id Int? @map("rak4_id")
+
+  ral1Id Int? @map("ral1_id")
+  ral2Id Int? @map("ral2_id")
+  ral3Id Int? @map("ral3_id")
+  ral4Id Int? @map("ral4_id")
+
+  rab1Id Int? @map("rab1_id")
+  rab2Id Int? @map("rab2_id")
+  rab3Id Int? @map("rab3_id")
+  rab4Id Int? @map("rab4_id")
+
+  rai1Id Int? @map("rai1_id")
+  rai2Id Int? @map("rai2_id")
+  rai3Id Int? @map("rai3_id")
+  rai4Id Int? @map("rai4_id")
+
+  // Referensi teknis lain
+  penggunaLayananId Int? @map("user_layanan_id")
+  bahasaId          Int? @map("bahasa_id")
+  frameworkId       Int? @map("framework_id")
+  metodeId          Int? @map("metode_id")
+  databaseId        Int? @map("database_id")
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relasi
+  unit    UnitKerja @relation(fields: [unitId], references: [id])
+  sestama Sestama?  @relation(fields: [sestamaId], references: [id])
+
+  provinsi        Provinsi?           @relation(fields: [provinsiId], references: [id])
+  kabKota         KabupatenKota?      @relation(fields: [kabKotaId], references: [id])
+  penggunaLayanan PenggunaLayanan?    @relation(fields: [penggunaLayananId], references: [id])
+  bahasa          Bahasa?             @relation(fields: [bahasaId], references: [id])
+  framework       Framework?          @relation(fields: [frameworkId], references: [id])
+  metode          MetodePengembangan? @relation(fields: [metodeId], references: [id])
+  databaseEngine  DatabaseEngine?     @relation(fields: [databaseId], references: [id])
+
+  // Relasi ke level-4 (sesuai tabel yang “memiliki” application[])
+  rad4 Rad4? @relation(fields: [rad4Id], references: [id])
+  raa4 Raa4? @relation(fields: [raa4Id], references: [id])
+  rak4 Rak4? @relation(fields: [rak4Id], references: [id])
+  ral4 Ral4? @relation(fields: [ral4Id], references: [id])
+  rab4 Rab4? @relation(fields: [rab4Id], references: [id])
+  rai4 Rai4? @relation(fields: [rai4Id], references: [id])
+
+  // Indexes
   @@index([unitId])
+  @@index([sestamaId])
   @@index([provinsiId])
   @@index([kabKotaId])
+  @@index([penggunaLayananId])
   @@index([bahasaId])
   @@index([frameworkId])
   @@index([metodeId])
   @@index([databaseId])
-  @@index([penggunaLayananId])
-  @@index([rkk4Id])
+  @@index([rad1Id])
+  @@index([rad2Id])
+  @@index([rad3Id])
+  @@index([rad4Id])
+  @@index([raa1Id])
+  @@index([raa2Id])
+  @@index([raa3Id])
+  @@index([raa4Id])
+  @@index([rak1Id])
+  @@index([rak2Id])
+  @@index([rak3Id])
+  @@index([rak4Id])
+  @@index([ral1Id])
+  @@index([ral2Id])
+  @@index([ral3Id])
+  @@index([ral4Id])
+  @@index([rab1Id])
+  @@index([rab2Id])
+  @@index([rab3Id])
   @@index([rab4Id])
+  @@index([rai1Id])
+  @@index([rai2Id])
+  @@index([rai3Id])
+  @@index([rai4Id])
   @@map("application")
 }

@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
 import { LogOut, Search, Settings, Eye, ExternalLink, Plus, Edit, Trash2 } from "lucide-react"
@@ -24,6 +25,9 @@ export default function DashboardPage() {
   const [applications, setApplications] = useState([])
   const [filteredApplications, setFilteredApplications] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedSestama, setSelectedSestama] = useState("")
+  const [selectedUnitKerja, setSelectedUnitKerja] = useState("")
+  const [selectedProvinsi, setSelectedProvinsi] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -38,9 +42,10 @@ export default function DashboardPage() {
   }, [router])
 
   useEffect(() => {
-    // Filter applications based on search term
+    let filtered = applications
+
     if (searchTerm) {
-      const filtered = applications.filter(
+      filtered = filtered.filter(
         (app) =>
           app.nama_aplikasi.toLowerCase().includes(searchTerm.toLowerCase()) ||
           app.niak?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -48,11 +53,22 @@ export default function DashboardPage() {
           app.sestama_nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           app.kondisi_aplikasi.toLowerCase().includes(searchTerm.toLowerCase()),
       )
-      setFilteredApplications(filtered)
-    } else {
-      setFilteredApplications(applications)
     }
-  }, [searchTerm, applications])
+
+    if (selectedSestama) {
+      filtered = filtered.filter((app) => app.sestama_nama === selectedSestama)
+    }
+
+    if (selectedUnitKerja) {
+      filtered = filtered.filter((app) => app.unit_nama === selectedUnitKerja)
+    }
+
+    if (selectedProvinsi) {
+      filtered = filtered.filter((app) => app.provinsi_nama === selectedProvinsi)
+    }
+
+    setFilteredApplications(filtered)
+  }, [searchTerm, selectedSestama, selectedUnitKerja, selectedProvinsi, applications])
 
   const fetchApplications = async () => {
     try {
@@ -92,7 +108,6 @@ export default function DashboardPage() {
       })
 
       if (response.ok) {
-        // Refresh applications list
         fetchApplications()
         alert("Aplikasi berhasil dihapus")
       } else {
@@ -135,6 +150,21 @@ export default function DashboardPage() {
 
   const canManageApplications = () => {
     return user && ["super_admin", "admin"].includes(user.role_name)
+  }
+
+  const getUniqueSestamaOptions = () => {
+    const sestamaSet = new Set(applications.map((app) => app.sestama_nama).filter(Boolean))
+    return Array.from(sestamaSet).sort()
+  }
+
+  const getUniqueUnitKerjaOptions = () => {
+    const unitKerjaSet = new Set(applications.map((app) => app.unit_nama).filter(Boolean))
+    return Array.from(unitKerjaSet).sort()
+  }
+
+  const getUniqueProvinsiOptions = () => {
+    const provinsiSet = new Set(applications.map((app) => app.provinsi_nama).filter(Boolean))
+    return Array.from(provinsiSet).sort()
   }
 
   if (!user) {
@@ -215,25 +245,71 @@ export default function DashboardPage() {
                   Menampilkan {filteredApplications.length} dari {applications.length} aplikasi
                 </CardDescription>
               </div>
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative w-full sm:w-80">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-blue-400" />
-                  <Input
-                    placeholder="Cari aplikasi..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
-                  />
+              <div className="flex flex-col lg:flex-row gap-4 w-full lg:w-auto">
+                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                  <Select value={selectedSestama} onValueChange={setSelectedSestama}>
+                    <SelectTrigger className="w-full sm:w-48 border-blue-200 focus:border-blue-500">
+                      <SelectValue placeholder="Filter Sestama" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Sestama</SelectItem>
+                      {getUniqueSestamaOptions().map((sestama) => (
+                        <SelectItem key={sestama} value={sestama}>
+                          {sestama}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={selectedUnitKerja} onValueChange={setSelectedUnitKerja}>
+                    <SelectTrigger className="w-full sm:w-48 border-blue-200 focus:border-blue-500">
+                      <SelectValue placeholder="Filter Unit Kerja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Unit Kerja</SelectItem>
+                      {getUniqueUnitKerjaOptions().map((unitKerja) => (
+                        <SelectItem key={unitKerja} value={unitKerja}>
+                          {unitKerja}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={selectedProvinsi} onValueChange={setSelectedProvinsi}>
+                    <SelectTrigger className="w-full sm:w-48 border-blue-200 focus:border-blue-500">
+                      <SelectValue placeholder="Filter Provinsi" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Provinsi</SelectItem>
+                      {getUniqueProvinsiOptions().map((provinsi) => (
+                        <SelectItem key={provinsi} value={provinsi}>
+                          {provinsi}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                {canManageApplications() && (
-                  <Button
-                    onClick={() => router.push("/dashboard/applications/add")}
-                    className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Tambah Aplikasi
-                  </Button>
-                )}
+
+                <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-blue-400" />
+                    <Input
+                      placeholder="Cari aplikasi..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  {canManageApplications() && (
+                    <Button
+                      onClick={() => router.push("/dashboard/applications/add")}
+                      className="bg-blue-600 hover:bg-blue-700 whitespace-nowrap"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Tambah Aplikasi
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -257,7 +333,7 @@ export default function DashboardPage() {
                   <TableHeader>
                     <TableRow className="border-blue-200">
                       <TableHead className="text-blue-900">URL</TableHead>
-                      <TableHead className="text-blue-900">NIAK</TableHead>
+                      <TableHead className="text-blue-900">NIA</TableHead>
                       <TableHead className="text-blue-900">Nama Aplikasi</TableHead>
                       <TableHead className="text-blue-900">Unit Kerja</TableHead>
                       <TableHead className="text-blue-900">Sestama</TableHead>
