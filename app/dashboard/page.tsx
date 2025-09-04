@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,10 +20,25 @@ import { Input } from "@/components/ui/input"
 import { LogOut, Search, Settings, Eye, ExternalLink, Plus, Edit, Trash2 } from "lucide-react"
 import { getStoredUser, clearStoredUser } from "@/lib/auth"
 
+// ⬇️ Tambahan: Recharts untuk grafik
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts"
+
 export default function DashboardPage() {
-  const [user, setUser] = useState(null)
-  const [applications, setApplications] = useState([])
-  const [filteredApplications, setFilteredApplications] = useState([])
+  const [user, setUser] = useState<any>(null)
+  const [applications, setApplications] = useState<any[]>([])
+  const [filteredApplications, setFilteredApplications] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedSestama, setSelectedSestama] = useState("")
   const [selectedUnitKerja, setSelectedUnitKerja] = useState("")
@@ -41,17 +56,36 @@ export default function DashboardPage() {
     fetchApplications()
   }, [router])
 
+  // ====== PENGAMBILAN DATA
+  const fetchApplications = async () => {
+    try {
+      const response = await fetch("/api/applications")
+      if (response.ok) {
+        const data = await response.json()
+        setApplications(data.applications || [])
+        setFilteredApplications(data.applications || [])
+      }
+    } catch (error) {
+      console.error("Error fetching applications:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // ====== FILTER & PENCARIAN
   useEffect(() => {
     let filtered = applications
 
     if (searchTerm) {
       filtered = filtered.filter(
         (app) =>
-          app.nama_aplikasi.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          app.nama_aplikasi?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           app.niak?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           app.unit_nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
           app.sestama_nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          app.kondisi_aplikasi.toLowerCase().includes(searchTerm.toLowerCase()),
+          app.status_aktif?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          app.status_penggunaan?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (app.keterangan_penggunaan?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false),
       )
     }
 
@@ -70,43 +104,22 @@ export default function DashboardPage() {
     setFilteredApplications(filtered)
   }, [searchTerm, selectedSestama, selectedUnitKerja, selectedProvinsi, applications])
 
-  const fetchApplications = async () => {
-    try {
-      const response = await fetch("/api/applications")
-      if (response.ok) {
-        const data = await response.json()
-        setApplications(data.applications)
-        setFilteredApplications(data.applications)
-      }
-    } catch (error) {
-      console.error("Error fetching applications:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
+  // ====== LOGOUT & HAPUS
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" })
       clearStoredUser()
       router.push("/login")
-    } catch (error) {
-      console.error("Logout error:", error)
+    } catch {
       clearStoredUser()
       router.push("/login")
     }
   }
 
   const handleDeleteApplication = async (applicationId: number) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus aplikasi ini?")) {
-      return
-    }
-
+    if (!confirm("Apakah Anda yakin ingin menghapus aplikasi ini?")) return
     try {
-      const response = await fetch(`/api/applications/${applicationId}`, {
-        method: "DELETE",
-      })
-
+      const response = await fetch(`/api/applications/${applicationId}`, { method: "DELETE" })
       if (response.ok) {
         fetchApplications()
         alert("Aplikasi berhasil dihapus")
@@ -120,20 +133,19 @@ export default function DashboardPage() {
     }
   }
 
-  const getStatusBadgeVariant = (status) => {
+  // ====== BADGE VARIANT
+  const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case "Aktif":
         return "default"
       case "Tidak Aktif":
         return "destructive"
-      case "Maintenance":
-        return "secondary"
       default:
         return "outline"
     }
   }
 
-  const getRoleDisplayName = (roleName) => {
+  const getRoleDisplayName = (roleName: string) => {
     switch (roleName) {
       case "super_admin":
         return "Super Administrator"
@@ -148,28 +160,102 @@ export default function DashboardPage() {
     }
   }
 
-  const canManageApplications = () => {
-    return user && ["super_admin", "admin"].includes(user.role_name)
-  }
+  const canManageApplications = () => user && ["super_admin", "admin"].includes(user.role_name)
 
   const getUniqueSestamaOptions = () => {
     const sestamaSet = new Set(applications.map((app) => app.sestama_nama).filter(Boolean))
     return Array.from(sestamaSet).sort()
   }
-
   const getUniqueUnitKerjaOptions = () => {
     const unitKerjaSet = new Set(applications.map((app) => app.unit_nama).filter(Boolean))
     return Array.from(unitKerjaSet).sort()
   }
-
   const getUniqueProvinsiOptions = () => {
     const provinsiSet = new Set(applications.map((app) => app.provinsi_nama).filter(Boolean))
     return Array.from(provinsiSet).sort()
   }
 
-  if (!user) {
-    return null
+  // ====== DATA UNTUK CHARTS
+  // Label human-readable untuk enum layanan_infra yang mungkin kamu pakai di DB
+  const normalizeInfra = (raw: any): string => {
+    if (!raw) return "Tidak diketahui"
+    const v = String(raw).toLowerCase()
+    if (v.includes("pdns")) return "PDNS"
+    if (v.includes("komputasi awan pusdatin")) return "Komputasi Awan Pusdatin"
+    if (v.includes("public cloud pusdatin")) return "Public Cloud Pusdatin"
+    if (v.includes("public cloud mandiri")) return "Public Cloud Mandiri"
+    if (v.includes("hosting")) return "Hosting"
+    if (v.includes("co-location pusdatin ciputat")) return "Co-location Pusdatin Ciputat"
+    if (v.includes("co-location pusdatin senayan")) return "Co-location Pusdatin Senayan"
+    if (v.includes("co-location pusdatin idc")) return "Co-location Pusdatin IDC"
+    if (v.includes("co-location mandiri")) return "Co-location Mandiri"
+    if (v.includes("ruang server mandiri")) return "Ruang Server Mandiri"
+    // fallback jika enum dari API berupa kode / uppercase
+    const mapUpper: Record<string, string> = {
+      PDNS: "PDNS",
+      KOMPUTASI_AWAN_PUSDATIN: "Komputasi Awan Pusdatin",
+      PUBLIC_CLOUD_PUSDATIN: "Public Cloud Pusdatin",
+      PUBLIC_CLOUD_MANDIRI: "Public Cloud Mandiri",
+      HOSTING: "Hosting",
+      COLOCATION_PUSDATIN_CIPUTAT: "Co-location Pusdatin Ciputat",
+      COLOCATION_PUSDATIN_SENAYAN: "Co-location Pusdatin Senayan",
+      COLOCATION_PUSDATIN_IDC: "Co-location Pusdatin IDC",
+      COLOCATION_MANDIRI: "Co-location Mandiri",
+      RUANG_SERVER_MANDIRI: "Ruang Server Mandiri",
+    }
+    return mapUpper[String(raw).toUpperCase()] ?? "Tidak diketahui"
   }
+
+  const unitBarData = useMemo(() => {
+    const bucket: Record<string, number> = {}
+    filteredApplications.forEach((a) => {
+      const key = a.unit_nama || "Tidak diketahui"
+      bucket[key] = (bucket[key] || 0) + 1
+    })
+    // sort desc & ambil top 12 biar rapi
+    return Object.entries(bucket)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([name, total]) => ({ name, total }))
+  }, [filteredApplications])
+
+  const statusDonutData = useMemo(() => {
+    const totalAktif = filteredApplications.filter((a) => a.status_aktif === "Aktif").length
+    const totalTidakAktif = filteredApplications.filter((a) => a.status_aktif === "Tidak Aktif").length
+
+    // Optional: deteksi “pengembangan” & “penggabungan” dari keterangan (jika ada).
+    const totalPengembangan = filteredApplications.filter((a) =>
+      (a.keterangan_penggunaan || "").toLowerCase().includes("pengembangan"),
+    ).length
+    const totalPenggabungan = filteredApplications.filter((a) =>
+      (a.keterangan_penggunaan || "").toLowerCase().includes("penggabungan"),
+    ).length
+
+    return [
+      { name: "Aktif", value: totalAktif },
+      { name: "Tidak Aktif", value: totalTidakAktif },
+      { name: "Pengembangan", value: totalPengembangan },
+      { name: "Penggabungan", value: totalPenggabungan },
+    ]
+  }, [filteredApplications])
+
+  const infraBarData = useMemo(() => {
+    const bucket: Record<string, number> = {}
+    filteredApplications.forEach((a) => {
+      // cari label dari beberapa kemungkinan properti
+      const label =
+        normalizeInfra(a.layanan_infra_label || a.layanan_infra || a.layananInfra || a.layanan_infra_text || null)
+      bucket[label] = (bucket[label] || 0) + 1
+    })
+    return Object.entries(bucket)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, total]) => ({ name, total }))
+  }, [filteredApplications])
+
+  // Warna untuk pie sections (opsional)
+  const pieColors = ["#2563eb", "#ef4444", "#f59e0b", "#10b981", "#8b5cf6", "#0ea5e9"]
+
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
@@ -177,7 +263,6 @@ export default function DashboardPage() {
       <header className="bg-white border-b border-blue-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo and Title */}
             <div className="flex items-center space-x-4">
               <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
                 <Settings className="w-6 h-6 text-white" />
@@ -188,7 +273,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -204,7 +288,22 @@ export default function DashboardPage() {
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">{user.username}</p>
                     <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                    <p className="text-xs leading-none text-blue-600">{getRoleDisplayName(user.role_name)}</p>
+                    <p className="text-xs leading-none text-blue-600">
+                      {(() => {
+                        switch (user.role_name) {
+                          case "super_admin":
+                            return "Super Administrator"
+                          case "admin":
+                            return "Administrator"
+                          case "sestama":
+                            return "Sestama"
+                          case "unit_kerja":
+                            return "Unit Kerja"
+                          default:
+                            return user.role_name
+                        }
+                      })()}
+                    </p>
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -218,9 +317,9 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
+        {/* Welcome */}
         <div className="mb-8">
           <Card className="border-blue-200 bg-gradient-to-r from-blue-600 to-blue-700 text-white">
             <CardHeader>
@@ -235,7 +334,82 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Applications Section */}
+        {/* ====== GRAFIK RINGKAS ====== */}
+        <div className="mb-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Per Unit Kerja */}
+          <Card className="border-blue-200">
+            <CardHeader>
+              <CardTitle className="text-blue-900 text-lg">Jumlah Aplikasi per Unit Kerja (Top 12)</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={unitBarData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" hide />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="total" name="Total" />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="mt-2 text-xs text-muted-foreground">
+                *Sumbu-X disembunyikan. Hover bar untuk nama unit; daftar diurutkan dari yang terbanyak.
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Status Aktif / Penggunaan */}
+          <Card className="border-blue-200">
+            <CardHeader>
+              <CardTitle className="text-blue-900 text-lg">Status Aplikasi</CardTitle>
+              <CardDescription>Kategori: Aktif, Tidak Aktif, Pengembangan*, Penggabungan*</CardDescription>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={statusDonutData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={4}
+                  >
+                    {statusDonutData.map((_, idx) => (
+                      <Cell key={idx} fill={pieColors[idx % pieColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-2 text-xs text-muted-foreground">
+                *Pengembangan/Penggabungan dideteksi dari <code>keterangan_penggunaan</code> (opsional).
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Lokasi Server / Layanan Infra */}
+          <Card className="border-blue-200">
+            <CardHeader>
+              <CardTitle className="text-blue-900 text-lg">Lokasi Server (Layanan Infra)</CardTitle>
+            </CardHeader>
+            <CardContent className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={infraBarData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="total" name="Total" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ====== TABEL APLIKASI ====== */}
         <Card className="border-blue-200">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -245,6 +419,7 @@ export default function DashboardPage() {
                   Menampilkan {filteredApplications.length} dari {applications.length} aplikasi
                 </CardDescription>
               </div>
+
               <div className="flex flex-col lg:flex-row gap-4 w-full lg:w-auto">
                 <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
                   <Select value={selectedSestama} onValueChange={setSelectedSestama}>
@@ -313,6 +488,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </CardHeader>
+
           <CardContent>
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -338,7 +514,9 @@ export default function DashboardPage() {
                       <TableHead className="text-blue-900">Unit Kerja</TableHead>
                       <TableHead className="text-blue-900">Sestama</TableHead>
                       <TableHead className="text-blue-900">Provinsi</TableHead>
-                      <TableHead className="text-blue-900">Kondisi</TableHead>
+                      <TableHead className="text-blue-900">Status Aktif</TableHead>
+                      <TableHead className="text-blue-900">Status Penggunaan</TableHead>
+                      <TableHead className="text-blue-900">Keterangan Penggunaan</TableHead>
                       <TableHead className="text-blue-900">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -366,8 +544,10 @@ export default function DashboardPage() {
                         <TableCell className="text-sm">{app.sestama_nama || "-"}</TableCell>
                         <TableCell className="text-sm">{app.provinsi_nama || "-"}</TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(app.kondisi_aplikasi)}>{app.kondisi_aplikasi}</Badge>
+                          <Badge variant={getStatusBadgeVariant(app.status_aktif)}>{app.status_aktif}</Badge>
                         </TableCell>
+                        <TableCell>{app.status_penggunaan || "-"}</TableCell>
+                        <TableCell>{app.keterangan_penggunaan || "-"}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Button

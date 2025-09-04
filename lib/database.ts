@@ -1,7 +1,7 @@
 // lib/database.ts
 import { prisma } from "./prisma"
 
-// ====== Types UI (tetap mengikuti file kamu) ======
+// ====== Types UI ======
 export interface User {
   user_id: number
   username: string
@@ -16,14 +16,11 @@ export interface User {
 export type JenisLayanan = 'G2G' | 'G2C' | 'G2B'
 export type BasisAplikasi = 'Web' | 'Mobile' | 'Desktop'
 export type SasaranLayanan = 'Lokal' | 'Nasional' | 'Internasional'
-export type SudahPse = 'Sudah' | 'Belum'               // UI
-export type TermasukBmn = 'Termasuk' | 'Tidak Termasuk' // UI
+export type SudahPse = 'Sudah' | 'Belum'
+export type TermasukBmn = 'Termasuk' | 'Tidak Termasuk'
 export type TipeLisensi = 'Open Source' | 'Proprietary'
-export type KondisiAplikasiUI =
-  | 'Aktif dan Digunakan'
-  | 'Aktif dan Tidak Digunakan'
-  | 'Tidak Aktif dan Digunakan'
-  | 'Tidak Aktif dan Tidak Digunakan'
+export type StatusAktifUI = 'Aktif' | 'Tidak Aktif'
+export type StatusPenggunaanUI = 'digunakan' | 'tidak digunakan'
 
 export interface Application {
   application_id: number
@@ -40,7 +37,9 @@ export interface Application {
   termasuk_bmn: TermasukBmn
   nomor_bmn: number | null
 
-  kondisi_aplikasi: KondisiAplikasiUI
+  status_aktif: StatusAktifUI
+  status_penggunaan: StatusPenggunaanUI
+  keterangan_penggunaan: string | null
 
   nama_pic_pengelola: string | null
   nomor_pic_pengelola: string | null
@@ -73,83 +72,30 @@ export type ApplicationForUI = Application & {
   unit_nama?: string | null
   sestama_nama?: string | null
   provinsi_nama?: string | null
-  niak?: string | null // alias untuk komponen lama
+  niak?: string | null
 }
 
-// ====== MAPPERS: enum DB -> string UI ======
-// DB enum YaTidak = 'YA' | 'TIDAK' (di DB tersimpan "Ya"/"Tidak" via @map)
+// ====== Mappers ======
 const mapYaTidakToSudahBelum = (v?: 'YA' | 'TIDAK' | null): SudahPse =>
   v === 'YA' ? 'Sudah' : 'Belum'
 
 const mapYaTidakToBmn = (v?: 'YA' | 'TIDAK' | null): TermasukBmn =>
   v === 'YA' ? 'Termasuk' : 'Tidak Termasuk'
 
-// DB enum BasisAplikasi: WEB/DESKTOP/MOBILE
-const mapBasisToUI = (v?: 'WEB' | 'DESKTOP' | 'MOBILE' | null): BasisAplikasi | null => {
-  if (!v) return null
-  if (v === 'WEB') return 'Web'
-  if (v === 'DESKTOP') return 'Desktop'
-  return 'Mobile'
-}
+const mapStatusAktif = (v?: 'AKTIF' | 'TIDAK_AKTIF' | null): StatusAktifUI =>
+  v === 'AKTIF' ? 'Aktif' : 'Tidak Aktif'
 
-// DB enum JenisLayanan: G2G/G2C/G2B
-const mapJenisToUI = (v?: 'G2G' | 'G2C' | 'G2B' | null): JenisLayanan | null => (v ?? null)
+const mapStatusPenggunaan = (v?: 'DIGUNAKAN' | 'TIDAK_DIGUNAKAN' | null): StatusPenggunaanUI =>
+  v === 'DIGUNAKAN' ? 'digunakan' : 'tidak digunakan'
 
-// DB enum SasaranLayanan: LOKAL/NASIONAL/INTERNASIONAL
-const mapSasaranToUI = (v?: 'LOKAL' | 'NASIONAL' | 'INTERNASIONAL' | null): SasaranLayanan | null => {
-  if (!v) return null
-  if (v === 'LOKAL') return 'Lokal'
-  if (v === 'NASIONAL') return 'Nasional'
-  return 'Internasional'
-}
-
-// DB enum TipeLisensi: OPEN_SOURCE/PROPRIETARY
-const mapLisensiToUI = (v?: 'OPEN_SOURCE' | 'PROPRIETARY' | null): TipeLisensi | null => {
-  if (!v) return null
-  return v === 'OPEN_SOURCE' ? 'Open Source' : 'Proprietary'
-}
-
-// DB enum KondisiAplikasi -> UI string
-const mapKondisiToUI = (
-  v?: 'AKTIF_DAN_DIGUNAKAN' | 'AKTIF_TIDAK_DIGUNAKAN' | 'TIDAK_AKTIF_AKAN_DIGUNAKAN' | 'TIDAK_AKTIF_TIDAK_DIGUNAKAN' | null
-): KondisiAplikasiUI => {
-  switch (v) {
-    case 'AKTIF_DAN_DIGUNAKAN': return 'Aktif dan Digunakan'
-    case 'AKTIF_TIDAK_DIGUNAKAN': return 'Aktif dan Tidak Digunakan'
-    case 'TIDAK_AKTIF_AKAN_DIGUNAKAN': return 'Tidak Aktif dan Digunakan' // mendekati label UI kamu
-    case 'TIDAK_AKTIF_TIDAK_DIGUNAKAN': return 'Tidak Aktif dan Tidak Digunakan'
-    default: return 'Aktif dan Digunakan'
-  }
-}
-
-// DB enum DomainKementerian -> string UI
-const mapDomainToUI = (v?: 'KEMENDIKDASMEN' | 'KEMENDIKBUD' | 'KEMENDIKTISAINTEK' | null): string | null => {
-  if (!v) return null
-  if (v === 'KEMENDIKDASMEN') return 'Kemendikdasmen'
-  if (v === 'KEMENDIKBUD') return 'Kemendikbud'
-  return 'Kemendiktisaintek'
-}
-
-// Beberapa enum kamu di UI pakai number (model/sistem/infra/ssl).
-// Untuk kesederhanaan dashboard (karena list tidak memakai ini), kita isi default 0/null.
-// Kalau nanti dibutuhkan, tinggal bikin mapper ke kode numerik yang kamu inginkan.
-const toNum = (v: unknown): number | null => (typeof v === 'number' ? v : null)
-
-// ====== AUTH ======
+// ====== Auth ======
 export async function authenticateUser(username: string, password: string): Promise<User | null> {
-  // SKELETON AUTH: samakan perilaku lama (password "password123" dianggap valid)
   if (password !== 'password123') return null
-
   const u = await prisma.user.findFirst({
     where: { username },
-    include: {
-      role: true,
-      sestama: true,
-      unitKerja: true,
-    },
+    include: { role: true, sestama: true, unitKerja: true },
   })
   if (!u) return null
-
   return {
     user_id: u.id,
     username: u.username,
@@ -165,14 +111,9 @@ export async function authenticateUser(username: string, password: string): Prom
 export async function getUserById(userId: number): Promise<User | null> {
   const u = await prisma.user.findUnique({
     where: { id: userId },
-    include: {
-      role: true,
-      sestama: true,
-      unitKerja: true,
-    },
+    include: { role: true, sestama: true, unitKerja: true },
   })
   if (!u) return null
-
   return {
     user_id: u.id,
     username: u.username,
@@ -185,15 +126,9 @@ export async function getUserById(userId: number): Promise<User | null> {
   }
 }
 
-// ====== CORE: ambil aplikasi sesuai role + enrich nama-nama + alias niak ======
+// ====== Mapper dari DB row ke UI ======
 function mapApplicationRowToUI(a: any): ApplicationForUI {
-  // kolom angka yang mungkin string di DB (nomor_pse/nomor_bmn), kita convert semampunya
-  const toIntOrNull = (x: unknown): number | null => {
-    const n = typeof x === 'string' ? parseInt(x, 10) : (typeof x === 'number' ? x : NaN)
-    return Number.isFinite(n) ? n as number : null
-  }
-
-  const app: ApplicationForUI = {
+  return {
     application_id: a.id,
     url: a.url ?? null,
     nia: a.nia ?? null,
@@ -201,30 +136,32 @@ function mapApplicationRowToUI(a: any): ApplicationForUI {
     singkatan_aplikasi: a.singkatanAplikasi ?? null,
     deskripsi_aplikasi: a.deskripsiAplikasi ?? null,
     output_aplikasi: a.outputAplikasi ?? null,
-    domain_kementerian: mapDomainToUI(a.domainKementerian),
+    domain_kementerian: a.domainKementerian ?? null,
 
     sudah_pse: mapYaTidakToSudahBelum(a.punyaPse),
-    nomor_pse: toIntOrNull(a.nomorPse),
+    nomor_pse: a.nomorPse ? parseInt(a.nomorPse, 10) : null,
     termasuk_bmn: mapYaTidakToBmn(a.termasukBmn),
-    nomor_bmn: toIntOrNull(a.nomorBmn),
+    nomor_bmn: a.nomorBmn ? parseInt(a.nomorBmn, 10) : null,
 
-    kondisi_aplikasi: mapKondisiToUI(a.kondisiAplikasi),
+    status_aktif: mapStatusAktif(a.statusAktif),
+    status_penggunaan: mapStatusPenggunaan(a.statusPenggunaan),
+    keterangan_penggunaan: a.keteranganPenggunaan ?? null,
 
     nama_pic_pengelola: a.namaPengelola ?? null,
     nomor_pic_pengelola: a.nomorHpPengelola ?? null,
     email_pengelola: a.emailPengelola ?? null,
 
-    jenis_layanan: mapJenisToUI(a.jenisLayanan),
-    sasaran_layanan: mapSasaranToUI(a.sasaranLayanan),
+    jenis_layanan: a.jenisLayanan as JenisLayanan,
+    sasaran_layanan: a.sasaranLayanan as SasaranLayanan,
     user_layanan_id: a.penggunaLayananId ?? null,
 
-    basis_aplikasi: mapBasisToUI(a.basisAplikasi),
+    basis_aplikasi: a.basisAplikasi as BasisAplikasi,
     ip_publik: a.ipPublik ?? null,
-    tipe_lisensi_aplikasi: mapLisensiToUI(a.tipeLisensi),
-    model_pengembangan: toNum(null),  // belum dipakai di list
-    sistem_operasi: toNum(null),      // belum dipakai di list
-    layanan_infra: toNum(null),       // belum dipakai di list
-    ssl_status: toNum(null),          // belum dipakai di list
+    tipe_lisensi_aplikasi: a.tipeLisensi as TipeLisensi,
+    model_pengembangan: null,
+    sistem_operasi: null,
+    layanan_infra: null,
+    ssl_status: null,
 
     bahasa_id: a.bahasaId ?? null,
     framework_id: a.frameworkId ?? null,
@@ -240,31 +177,27 @@ function mapApplicationRowToUI(a: any): ApplicationForUI {
     sestama_nama: a.sestama?.nama ?? null,
     provinsi_nama: a.provinsi?.nama ?? null,
 
-    niak: a.nia ?? null, // alias untuk kompatibilitas komponen lama
+    niak: a.nia ?? null,
   }
-
-  return app
 }
 
 export async function getApplicationsByRole(user: User): Promise<ApplicationForUI[]> {
   const where: any = {}
-  if (user.role_name === 'sestama') where.sestamaId = user.sestama_id ?? undefined
-  else if (user.role_name === 'unit_kerja') where.unitId = user.unit_id ?? undefined
-  // super_admin/admin: tanpa filter
+  if (user.role_name === 'sestama') where.sestamaId = user.sestama_id
+  else if (user.role_name === 'unit_kerja') where.unitId = user.unit_id
 
   const rows = await prisma.application.findMany({
     where,
     include: { unit: true, sestama: true, provinsi: true },
     orderBy: { id: 'asc' },
   })
-
   return rows.map(mapApplicationRowToUI)
 }
 
 export async function getApplicationById(id: number, user: User): Promise<ApplicationForUI | null> {
   const where: any = { id }
-  if (user.role_name === 'sestama') where.sestamaId = user.sestama_id ?? undefined
-  if (user.role_name === 'unit_kerja') where.unitId = user.unit_id ?? undefined
+  if (user.role_name === 'sestama') where.sestamaId = user.sestama_id
+  if (user.role_name === 'unit_kerja') where.unitId = user.unit_id
 
   const a = await prisma.application.findFirst({
     where,

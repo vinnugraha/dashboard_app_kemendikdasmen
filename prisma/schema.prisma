@@ -397,7 +397,9 @@ model Application {
   emailPengelola    String?             @map("email_pengelola")
   ipPublik          String?             @map("ip_publik")
   jenisLayanan      JenisLayanan?       @map("jenis_layanan")
-  kondisiAplikasi   KondisiAplikasi?    @map("kondisi_aplikasi")
+  statusAktif         StatusAktif?        @map("status_aktif")
+  statusPenggunaan    StatusPenggunaan?   @map("status_penggunaan")
+  keteranganPenggunaan String?            @map("keterangan_penggunaan")
   layananInfra      LayananInfra?       @map("layanan_infra")
   modelPengembangan ModelPengembangan?  @map("model_pengembangan")
   namaPengelola     String?             @map("nama_pengelola")
@@ -500,11 +502,16 @@ enum YaTidak {
   TIDAK @map("Tidak")
 }
 
-enum KondisiAplikasi {
-  AKTIF_DAN_DIGUNAKAN         @map("Aktif dan Digunakan")
-  AKTIF_TIDAK_DIGUNAKAN       @map("Aktif dan Tidak Digunakan")
-  TIDAK_AKTIF_AKAN_DIGUNAKAN  @map("Tidak Aktif tetapi Akan Digunakan")
-  TIDAK_AKTIF_TIDAK_DIGUNAKAN @map("Tidak Aktif dan Tidak Digunakan")
+enum StatusAktif {
+  AKTIF        @map("Aktif")
+  TIDAK_AKTIF  @map("Tidak Aktif")
+  PENGEMBANGAN @map("Pengembangan")
+  PENGGABUNGAN @map("Penggabungan")
+}
+
+enum StatusPenggunaan {
+  DIGUNAKAN        @map("digunakan")
+  TIDAK_DIGUNAKAN  @map("tidak digunakan")
 }
 
 enum JenisLayanan {
